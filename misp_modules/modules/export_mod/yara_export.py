@@ -22,7 +22,7 @@ moduleinfo = {  'version': '0.1',
 
 # config fields that your code expects from the site admin
 # moduleconfig = ['Group_by_event']
-moduleconfig = []
+moduleconfig = ['optional_host_url']
 
 attributes_with_special_processing={
     'yara': 'yara_rule_rule',
@@ -51,6 +51,7 @@ attributes_with_special_processing={
     'sha512/256': 'ignore_rule_unsupported',
     # irrelevant
     'snort': 'ignore_rule_irrelevant',
+    'port' : 'ignore_rule_irrelevant',
 }
 
 
@@ -58,7 +59,8 @@ def handler(q=False):
     if q is False:
         return False
     request = json.loads(q)
-    #config = request["config"] if 'config' in request else {'Group_by_event':False}
+    config = request['config'] if 'config' in request and request['config'] else {'optional_host_url':None}
+    server_url = config['optional_host_url'] if config['optional_host_url'] else ''
     data = request['data']
     generated_yara = ''
     zip_buffer = io.BytesIO()
@@ -66,6 +68,7 @@ def handler(q=False):
         for ev in data:
             event_uuid = ev['Event']['uuid']
             event_info = ev['Event']['info']
+            event_link = server_url+'/event/view/'+event_uuid
             event = ev["Attribute"]
             for attr in event:
                 if attr['to_ids']:
@@ -74,9 +77,9 @@ def handler(q=False):
                         response.writestr(attr['uuid']+'.yar', attr['value'])
                     elif attr_type in attributes_with_special_processing:
                         processing_func = globals()[attributes_with_special_processing[attr_type]]
-                        generated_yara+='\r\n\r\n'+processing_func(event_info, event_uuid, attr)
+                        generated_yara+='\r\n\r\n'+processing_func(attr, extra_meta={'event_uuid':event_uuid, 'event_info':event_info, 'event_link':event_link})
                     else:
-                        generated_yara+='\r\n\r\n'+single_hex_or_string_rule(event_info, event_uuid, attr)
+                        generated_yara+='\r\n\r\n'+single_hex_or_string_rule(attr, extra_meta={'event_uuid':event_uuid, 'event_info':event_info, 'event_link':event_link})
         response.writestr('q', q)
         response.writestr('_generated_from_IOCs.yar', generated_yara)
         #r={'data':base64.b64encode(generated_yara.encode('utf-8')).decode('utf-8')}
@@ -116,7 +119,7 @@ def version():
     return moduleinfo
 
 # -----HELPERS FOR RULES CONSTRUCTION ------------------------------------------
-def basic_rule(event_info, event_uuid, attribute, strings_stmts, condition_stmts, **kwargs):
+def basic_rule(attribute, strings_stmts, condition_stmts, **kwargs):
     if 'modules' not in kwargs or not kwargs['modules']:
         modules = []
     elif isinstance(kwargs['modules'], six.string_types) :
@@ -128,13 +131,15 @@ def basic_rule(event_info, event_uuid, attribute, strings_stmts, condition_stmts
     if isinstance(condition_stmts, six.string_types) :
         condition_stmts = [condition_stmts]
     meta_dict={
-        'event':event_info,
-        'event_uuid': event_uuid,
         'attribute_uuid': attribute['uuid'],
         'category': attribute['category'],
         'type': attribute['type'],
         'comment': attribute['comment'].replace('\n', ' ').replace('\r', ' ')
     }
+
+
+    if 'extra_meta' in kwargs and kwargs['extra_meta']:
+        meta_dict.update(kwargs['extra_meta'])
     rulename = 'attr_{}'.format(re.sub(r'\W+', '_', attribute['uuid']))
     meta='\r\n\t\t'.join([(key+' = '+text_str(meta_dict[key])) for key in meta_dict])
     strings='\r\n\t\t'.join(strings_stmts) if strings_stmts else ''
@@ -184,20 +189,20 @@ def pe_filename_cond(filename):
 
 # ----- FUNCTIONS TO CONVERT ATTRIBUTES TO YARA RULES ACCORDING TO THEIR TYPE --
 
-def yara_rule_rule(event_info, event_uuid, attribute):
+def yara_rule_rule(attribute, **kwargs):
     return attribute['value']
 
-def single_string_rule(event_info, event_uuid, attribute):
+def single_string_rule(attribute,**kwargs):
     strings_stmt = '$ioc = '+text_str(attribute['value'])
     condition_stmt = '$ioc'
-    return basic_rule(event_info,event_uuid,attribute,strings_stmt,condition_stmt)
+    return basic_rule(attribute,strings_stmt,condition_stmt, **kwargs)
 
-def single_hex_rule(event_info, event_uuid, attribute):
+def single_hex_rule(attribute, **kwargs):
     strings_stmt = '$ioc = '+hex_str(attribute['value'])
     condition_stmt = '$ioc'
-    return basic_rule(event_info,event_uuid,attribute,strings_stmt,condition_stmt)
+    return basic_rule(attribute,strings_stmt,condition_stmt, **kwargs)
 
-def single_hex_or_string_rule(event_info, event_uuid, attribute):
+def single_hex_or_string_rule(attribute, **kwargs):
     str_value = text_str(attribute['value'])
     try:
         hex_value = hex_str(attribute['value'])
@@ -206,9 +211,9 @@ def single_hex_or_string_rule(event_info, event_uuid, attribute):
     except ValueError as e:
         strings_stmt = '$ioc = '+ str_value
         condition_stmt = '$ioc'
-    return basic_rule(event_info,event_uuid,attribute,strings_stmt,condition_stmt)
+    return basic_rule(attribute,strings_stmt,condition_stmt, **kwargs)
 
-def hash_rule(event_info, event_uuid, attribute):
+def hash_rule(attribute, **kwargs):
     if attribute['type'].startswith('filename|'):
         _, hashtype = attribute['type'].rsplit('|', 1)
         filename, hashvalue = attribute['value'].rsplit('|', 1)
@@ -220,29 +225,29 @@ def hash_rule(event_info, event_uuid, attribute):
         hashtype = attribute['type']
         hashvalue = attribute['value']
         condition_stmt, required_module = hash_cond(hashtype, hashvalue)
-    return basic_rule(event_info,event_uuid,attribute,None,condition_stmt, modules=required_module)
+    return basic_rule(attribute,None,condition_stmt, modules=required_module, **kwargs)
 
-def filename_rule(event_info, event_uuid, attribute):
+def filename_rule(attribute, **kwargs):
     condition_stmt = pe_filename_cond(attribute['value'])
-    return basic_rule(event_info,event_uuid,attribute,None,condition_stmt, modules='pe')
+    return basic_rule(attribute,None,condition_stmt, modules='pe', **kwargs)
 
-def filename_partial_rule(event_info, event_uuid, attribute):
+def filename_partial_rule(attribute, **kwargs):
     filename, _ = attribute['value'].lsplit('|', 1)
     condition_stmt = pe_filename_cond(filename)
-    return basic_rule(event_info,event_uuid,attribute,None,condition_stmt, modules='pe')
+    return basic_rule(attribute,None,condition_stmt, modules='pe', **kwargs)
 
-def ignore_rule(event_info, event_uuid, attribute, **kwargs):
+def ignore_rule(attribute, **kwargs):
     ignore_reason = ('//\t'+kwargs['ignore_reason']) if 'ignore_reason' in kwargs else ''
     return '// Ignored attribute\r\n\
             //\tType: {}\r\n//\tuuid: {}\r\n{}'.format(attribute['type'], attribute['uuid'], ignore_reason)
 
-def ignore_rule_unsupported(event_info, event_uuid, attribute):
-    reason = 'IOC type "{}" is not supported by yara or any of its modules'.format(attribute['type'])
-    return ignore_rule(event_info, event_uuid, attribute, ignore_reason=reason)
+def ignore_rule_unsupported(attribute, **kwargs):
+    reason = 'IOC type "{}" is not supported by yara or any of its native modules'.format(attribute['type'])
+    return ignore_rule(attribute, ignore_reason=reason, **kwargs)
 
-def ignore_rule_irrelevant():
+def ignore_rule_irrelevant(attribute, **kwargs):
     reason = 'Creating a yara IOC from a "{}" attribute does not make sense'.format(attribute['type'])
-    return ignore_rule(event_info, event_uuid, attribute, ignore_reason=reason)
+    return ignore_rule(attribute, ignore_reason=reason, **kwargs)
 
 
 
