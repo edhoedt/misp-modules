@@ -30,13 +30,27 @@ attributes_with_special_processing={
     'md5': 'hash_rule',
     'sha1': 'hash_rule',
     'sha256': 'hash_rule',
-    #'impash': pe_rule,
-    #'filename|md5': 'hash_filename_rule',
-    #'filename|sha1': 'hash_filename_rule',
-    #'filename|sha256': 'hash_filename_rule',
-    #'filename|impash': 'pe_filename_rule',
+    'impash': 'hash_rule',
+    'filename|md5': 'hash_rule',
+    'filename|sha1': 'hash_rule',
+    'filename|sha256': 'hash_rule',
+    'filename|impash': 'hash_rule',
+    'filename': 'filename_rule',
     ##'size-in-bytes': filesize_rule,
-    'snort': 'ignore_rule',
+    # partial support
+    'filename|sha224': 'filename_partial_rule',
+    'filename|sha384': 'filename_partial_rule',
+    'filename|sha512': 'filename_partial_rule',
+    'filename|sha512/224': 'filename_partial_rule',
+    'filename|sha512/256': 'filename_partial_rule',
+    # unsupported
+    'sha224': 'ignore_rule_unsupported',
+    'sha384': 'ignore_rule_unsupported',
+    'sha512': 'ignore_rule_unsupported',
+    'sha512/224': 'ignore_rule_unsupported',
+    'sha512/256': 'ignore_rule_unsupported',
+    # irrelevant
+    'snort': 'ignore_rule_irrelevant',
 }
 
 
@@ -101,9 +115,9 @@ def version():
     moduleinfo['config'] = moduleconfig
     return moduleinfo
 
-# ------------------------------------------------------------------------------
+# -----HELPERS FOR RULES CONSTRUCTION ------------------------------------------
 def basic_rule(event_info, event_uuid, attribute, strings_stmts, condition_stmts, **kwargs):
-    if 'modules' not in kwargs:
+    if 'modules' not in kwargs or not kwargs['modules']:
         modules = []
     elif isinstance(kwargs['modules'], six.string_types) :
         modules = [kwargs['modules']]
@@ -150,7 +164,25 @@ def hex_str(hex_ioc):
         return '{'+trimmed_ioc+'}'
     else:
         raise ValueError('hex_str expects a string in hex format possibly surrounded by curly brackets, spaces or quotes')
-# ------------------------------------------------------------------------------
+
+def hash_cond(hashtype, hashvalue):
+    if hashtype in ['md5','sha1','sha256']:
+        condition_stmt = 'hash.{}(0, filesize) == {}'.format(hashtype, text_str(hashvalue.lower()))
+        required_module = 'hash'
+    elif hashtype is 'imphash':
+        condition_stmt = 'pe.imphash() == ' + text_str(hashvalue.lower())
+        required_module = 'pe'
+    else:
+        condition_stmt = ''
+        required_module = None
+        raise Warning('Hash type "{}" unsupported'.format(hashtype))
+    return condition_stmt, required_module
+
+def pe_filename_cond(filename):
+    return 'pe.version_info["OriginalFilename"] == '+text_str(filename)
+
+
+# ----- FUNCTIONS TO CONVERT ATTRIBUTES TO YARA RULES ACCORDING TO THEIR TYPE --
 
 def yara_rule_rule(event_info, event_uuid, attribute):
     return attribute['value']
@@ -177,17 +209,42 @@ def single_hex_or_string_rule(event_info, event_uuid, attribute):
     return basic_rule(event_info,event_uuid,attribute,strings_stmt,condition_stmt)
 
 def hash_rule(event_info, event_uuid, attribute):
-    hashtype = attribute['type']
-    hashvalue = attribute['value']
-    if hashtype in ['md5','sha1','sha256']:
-        condition_stmt = 'hash.{}(0, filesize) == {}'.format(hashtype, text_str(hashvalue.lower()))
+    if attribute['type'].startswith('filename|'):
+        _, hashtype = attribute['type'].rsplit('|', 1)
+        filename, hashvalue = attribute['value'].rsplit('|', 1)
+        condition_stmt, required_module = hash_cond(hashtype, hashvalue)
+        condition_stmt = condition_stmt + ' or '+pe_filename_cond(filename)
+        if required_module is not 'pe':
+            required_module = [required_module, 'pe']
     else:
-        condition_stmt = ''
-        raise Warning('Hash type "{}" unsupported'.format(hashtype))
-    return basic_rule(event_info,event_uuid,attribute,None,condition_stmt, modules='hash')
+        hashtype = attribute['type']
+        hashvalue = attribute['value']
+        condition_stmt, required_module = hash_cond(hashtype, hashvalue)
+    return basic_rule(event_info,event_uuid,attribute,None,condition_stmt, modules=required_module)
 
-def ignore_rule(event_info, event_uuid, attribute):
-    return '// Ignored attribute\r\n//\tType: {}\r\n//\tuuid: {}'.format(attribute['type'], attribute['uuid'])
+def filename_rule(event_info, event_uuid, attribute):
+    condition_stmt = pe_filename_cond(attribute['value'])
+    return basic_rule(event_info,event_uuid,attribute,None,condition_stmt, modules='pe')
+
+def filename_partial_rule(event_info, event_uuid, attribute):
+    filename, _ = attribute['value'].lsplit('|', 1)
+    condition_stmt = pe_filename_cond(filename)
+    return basic_rule(event_info,event_uuid,attribute,None,condition_stmt, modules='pe')
+
+def ignore_rule(event_info, event_uuid, attribute, **kwargs):
+    ignore_reason = ('//\t'+kwargs['ignore_reason']) if 'ignore_reason' in kwargs else ''
+    return '// Ignored attribute\r\n\
+            //\tType: {}\r\n//\tuuid: {}\r\n{}'.format(attribute['type'], attribute['uuid'], ignore_reason)
+
+def ignore_rule_unsupported(event_info, event_uuid, attribute):
+    reason = 'IOC type "{}" is not supported by yara or any of its modules'.format(attribute['type'])
+    return ignore_rule(event_info, event_uuid, attribute, ignore_reason=reason)
+
+def ignore_rule_irrelevant():
+    reason = 'Creating a yara IOC from a "{}" attribute does not make sense'.format(attribute['type'])
+    return ignore_rule(event_info, event_uuid, attribute, ignore_reason=reason)
+
+
 
 #def ip_rule(event_info, event_uuid, attribute)
 #    parse_res = urlparse(attribute['value'])
