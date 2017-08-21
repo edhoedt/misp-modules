@@ -170,10 +170,10 @@ def basic_rule(attribute, strings_stmts, condition_stmts, **kwargs):
                         condition_section,
                         rule_end_section])
 
-def text_str(string_ioc, ascii_wide=False):
+def text_str(string_ioc, ascii_wide_nocase=False):
     quoted = u'"{}"'.format(string_ioc.replace('\\','\\\\').replace('"','\\"'))
     if ascii_wide:
-        return quoted + ' ascii wide'
+        return quoted + ' nocase ascii wide'
     else:
         return quoted
 
