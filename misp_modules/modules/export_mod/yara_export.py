@@ -82,6 +82,7 @@ def handler(q=False):
             event_info = ev['Event']['info']
             event_link = server_url+'/events/view/'+event_uuid
             event = ev["Attribute"]
+            event_meta={'event_uuid':event_uuid, 'event_info':event_info, 'event_link':event_link}
             for attr in event:
                 if attr['to_ids']:
                     attr_type = attr['type']
@@ -89,9 +90,9 @@ def handler(q=False):
                         response.writestr(attr['uuid']+'.yar', attr['value'])
                     elif attr_type in attributes_with_special_processing:
                         processing_func = globals()[attributes_with_special_processing[attr_type]]
-                        generated_yara+='\r\n\r\n'+processing_func(attr, extra_meta={'event_uuid':event_uuid, 'event_info':event_info, 'event_link':event_link})
+                        generated_yara+='\r\n\r\n'+processing_func(attr, extra_meta=event_meta)
                     else:
-                        generated_yara+='\r\n\r\n'+single_hex_or_string_rule(attr, extra_meta={'event_uuid':event_uuid, 'event_info':event_info, 'event_link':event_link})
+                        generated_yara+='\r\n\r\n'+single_hex_or_string_rule(attr, extra_meta=event_meta)
         response.writestr('_generated_from_IOCs.yar', generated_yara)
     zip_buffer.seek(0)
     zip_as_bytes = zip_buffer.read()
@@ -150,7 +151,7 @@ def basic_rule(attribute, strings_stmts, condition_stmts, **kwargs):
 
     if 'extra_meta' in kwargs and kwargs['extra_meta']:
         meta_dict.update(kwargs['extra_meta'])
-    rulename = 'attr_{}'.format(re.sub(r'\W+', '_', attribute['uuid']))
+    rulename = 'Attr_{}'.format(re.sub(r'\W+', '_', attribute['uuid']))
     meta='\r\n\t\t'.join([(key+' = '+text_str(meta_dict[key])) for key in meta_dict])
     strings='\r\n\t\t'.join(strings_stmts) if strings_stmts else ''
     condition='\r\n\t\t'.join(condition_stmts) if condition_stmts else ''
