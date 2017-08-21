@@ -15,15 +15,15 @@ inputSource = ['event']
 outputFileExtension = 'zip'
 responseType = 'application/zip'
 
-moduleinfo = {  'version': '0.1',
-                'author': 'edhoedt',
-                'description': 'Export IDS-ready IOCs as yara rules',
-                'module-type': ['export']}
+moduleinfo = {'version': '0.1',
+              'author': 'edhoedt',
+              'description': 'Export IDS-ready IOCs as yara rules',
+              'module-type': ['export']}
 
 # config fields that your code expects from the site admin
 moduleconfig = ['optional_host_url']
 
-attributes_with_special_processing={
+attributes_with_special_processing = {
     'yara': 'yara_rule_rule',
     'hex': 'single_hex_rule',
     'md5': 'hash_rule',
@@ -35,7 +35,7 @@ attributes_with_special_processing={
     'filename|sha256': 'hash_rule',
     'filename|impash': 'hash_rule',
     'filename': 'filename_rule',
-    ##'size-in-bytes': filesize_rule,
+    # # 'size-in-bytes': filesize_rule,
     # partial support
     'filename|sha224': 'filename_partial_rule',
     'filename|sha384': 'filename_partial_rule',
@@ -46,10 +46,10 @@ attributes_with_special_processing={
     'filename|impfuzzy': 'filename_partial_rule',
     'filename|tlsh': 'filename_partial_rule',
     'filename|authentihash': 'filename_partial_rule',
-    'ip-dst|port':'host_port_rule',
-    'ip-src|port':'host_port_rule',
-    'hostname|port':'host_port_rule',
-    'domain|ip':'domaip_ip_rule',
+    'ip-dst|port': 'host_port_rule',
+    'ip-src|port': 'host_port_rule',
+    'hostname|port': 'host_port_rule',
+    'domain|ip': 'domaip_ip_rule',
     # unsupported
     'sha224': 'ignore_rule_unsupported',
     'sha384': 'ignore_rule_unsupported',
@@ -71,7 +71,7 @@ def handler(q=False):
     if q is False:
         return False
     request = json.loads(q)
-    config = request['config'] if 'config' in request and request['config'] else {'optional_host_url':None}
+    config = request['config'] if 'config' in request and request['config'] else {'optional_host_url': None}
     server_url = config['optional_host_url'] if config['optional_host_url'] else ''
     data = request['data']
     generated_yara = ''
@@ -82,7 +82,7 @@ def handler(q=False):
             event_info = ev['Event']['info']
             event_link = server_url+'/events/view/'+event_uuid
             event = ev["Attribute"]
-            event_meta={'event_uuid':event_uuid, 'event_info':event_info, 'event_link':event_link}
+            event_meta = {'event_uuid': event_uuid, 'event_info': event_info, 'event_link': event_link}
             for attr in event:
                 if attr['to_ids']:
                     attr_type = attr['type']
@@ -90,13 +90,13 @@ def handler(q=False):
                         response.writestr(attr['uuid']+'.yar', attr['value'])
                     elif attr_type in attributes_with_special_processing:
                         processing_func = globals()[attributes_with_special_processing[attr_type]]
-                        generated_yara+='\r\n\r\n'+processing_func(attr, extra_meta=event_meta)
+                        generated_yara += '\r\n\r\n'+processing_func(attr, extra_meta=event_meta)
                     else:
-                        generated_yara+='\r\n\r\n'+single_hex_or_string_rule(attr, extra_meta=event_meta)
+                        generated_yara += '\r\n\r\n'+single_hex_or_string_rule(attr, extra_meta=event_meta)
         response.writestr('_generated_from_IOCs.yar', generated_yara)
     zip_buffer.seek(0)
     zip_as_bytes = zip_buffer.read()
-    r={'data':base64.b64encode(zip_as_bytes).decode('utf-8')}
+    r = {'data': base64.b64encode(zip_as_bytes).decode('utf-8')}
     return r
 
 
@@ -129,32 +129,32 @@ def version():
     moduleinfo['config'] = moduleconfig
     return moduleinfo
 
+
 # -----HELPERS FOR RULES CONSTRUCTION ------------------------------------------
 def basic_rule(attribute, strings_stmts, condition_stmts, **kwargs):
     if 'modules' not in kwargs or not kwargs['modules']:
         modules = []
-    elif isinstance(kwargs['modules'], six.string_types) :
+    elif isinstance(kwargs['modules'], six.string_types):
         modules = [kwargs['modules']]
     else:
         modules = kwargs['modules']
-    if isinstance(strings_stmts, six.string_types) :
+    if isinstance(strings_stmts, six.string_types):
         strings_stmts = [strings_stmts]
-    if isinstance(condition_stmts, six.string_types) :
+    if isinstance(condition_stmts, six.string_types):
         condition_stmts = [condition_stmts]
-    meta_dict={
+    meta_dict = {
         'attribute_uuid': attribute['uuid'],
         'category': attribute['category'],
         'type': attribute['type'],
         'comment': attribute['comment'].replace('\n', ' ').replace('\r', ' ')
     }
 
-
     if 'extra_meta' in kwargs and kwargs['extra_meta']:
         meta_dict.update(kwargs['extra_meta'])
     rulename = 'Attr_{}'.format(re.sub(r'\W+', '_', attribute['uuid']))
-    meta='\r\n\t\t'.join([(key+' = '+text_str(meta_dict[key])) for key in meta_dict])
-    strings='\r\n\t\t'.join(strings_stmts) if strings_stmts else ''
-    condition='\r\n\t\t'.join(condition_stmts) if condition_stmts else ''
+    meta = '\r\n\t\t'.join([(key+' = '+text_str(meta_dict[key])) for key in meta_dict])
+    strings = '\r\n\t\t'.join(strings_stmts) if strings_stmts else ''
+    condition = '\r\n\t\t'.join(condition_stmts) if condition_stmts else ''
 
     imports_section = '\r\n'.join(['import "{}"'.format(m) for m in modules]) if modules else ''
     rule_start_section = 'rule '+rulename+'{'
@@ -170,12 +170,14 @@ def basic_rule(attribute, strings_stmts, condition_stmts, **kwargs):
                         condition_section,
                         rule_end_section])
 
+
 def text_str(string_ioc, ascii_wide_nocase=False):
-    quoted = u'"{}"'.format(string_ioc.replace('\\','\\\\').replace('"','\\"'))
-    if ascii_wide:
+    quoted = u'"{}"'.format(string_ioc.replace('\\', '\\\\').replace('"', '\\"'))
+    if ascii_wide_nocase:
         return quoted + ' nocase ascii wide'
     else:
         return quoted
+
 
 def hex_str(hex_ioc):
     trimmed_ioc = re.sub(r'\s', '', hex_ioc)
@@ -183,10 +185,12 @@ def hex_str(hex_ioc):
     if all(c.lower() in '0123456789abcdef' for c in trimmed_ioc):
         return '{'+trimmed_ioc+'}'
     else:
-        raise ValueError('hex_str expects a string in hex format possibly surrounded by curly brackets, spaces or quotes')
+        raise ValueError('hex_str expects a string in hex format \
+                         possibly surrounded by curly brackets, spaces or quotes')
+
 
 def hash_cond(hashtype, hashvalue):
-    if hashtype in ['md5','sha1','sha256']:
+    if hashtype in ['md5', 'sha1', 'sha256']:
         condition_stmt = 'hash.{}(0, filesize) == {}'.format(hashtype, text_str(hashvalue.lower()))
         required_module = 'hash'
     elif hashtype is 'imphash':
@@ -198,6 +202,7 @@ def hash_cond(hashtype, hashvalue):
         raise Warning('Hash type "{}" unsupported'.format(hashtype))
     return condition_stmt, required_module
 
+
 def pe_filename_cond(filename):
     return 'pe.version_info["OriginalFilename"] == '+text_str(filename)
 
@@ -207,15 +212,18 @@ def pe_filename_cond(filename):
 def yara_rule_rule(attribute, **kwargs):
     return attribute['value']
 
-def single_string_rule(attribute,**kwargs):
+
+def single_string_rule(attribute, **kwargs):
     strings_stmt = '$ioc = '+text_str(attribute['value'], True)
     condition_stmt = '$ioc'
-    return basic_rule(attribute,strings_stmt,condition_stmt, **kwargs)
+    return basic_rule(attribute, strings_stmt, condition_stmt, **kwargs)
+
 
 def single_hex_rule(attribute, **kwargs):
     strings_stmt = '$ioc = '+hex_str(attribute['value'])
     condition_stmt = '$ioc'
-    return basic_rule(attribute,strings_stmt,condition_stmt, **kwargs)
+    return basic_rule(attribute, strings_stmt, condition_stmt, **kwargs)
+
 
 def single_hex_or_string_rule(attribute, **kwargs):
     str_value = text_str(attribute['value'], True)
@@ -224,9 +232,10 @@ def single_hex_or_string_rule(attribute, **kwargs):
         strings_stmt = ['$ioc_str = '+str_value, '$ioc_hex = '+hex_value]
         condition_stmt = '$ioc_str or $ioc_hex'
     except ValueError as e:
-        strings_stmt = '$ioc = '+ str_value
+        strings_stmt = '$ioc = ' + str_value
         condition_stmt = '$ioc'
-    return basic_rule(attribute,strings_stmt,condition_stmt, **kwargs)
+    return basic_rule(attribute, strings_stmt, condition_stmt, **kwargs)
+
 
 def hash_rule(attribute, **kwargs):
     if attribute['type'].startswith('filename|'):
@@ -240,37 +249,44 @@ def hash_rule(attribute, **kwargs):
         hashtype = attribute['type']
         hashvalue = attribute['value']
         condition_stmt, required_module = hash_cond(hashtype, hashvalue)
-    return basic_rule(attribute,None,condition_stmt, modules=required_module, **kwargs)
+    return basic_rule(attribute, None, condition_stmt, modules=required_module, **kwargs)
+
 
 def filename_rule(attribute, **kwargs):
     condition_stmt = pe_filename_cond(attribute['value'])
-    return basic_rule(attribute,None,condition_stmt, modules='pe', **kwargs)
+    return basic_rule(attribute, None, condition_stmt, modules='pe', **kwargs)
+
 
 def filename_partial_rule(attribute, **kwargs):
     filename, _ = attribute['value'].lsplit('|', 1)
     condition_stmt = pe_filename_cond(filename)
-    return basic_rule(attribute,None,condition_stmt, modules='pe', **kwargs)
+    return basic_rule(attribute, None, condition_stmt, modules='pe', **kwargs)
+
 
 def host_port_rule(attribute, **kwargs):
     host, port = attribute['value'].rsplit('|', 1)
-    strings_stmt= ['$ioc_host_only = '+text_str(host, True)]
+    strings_stmt = ['$ioc_host_only = '+text_str(host, True)]
     condition_stmt = '$ioc_host_only'
-    return basic_rule(attribute,strings_stmt,condition_stmt, **kwargs)
+    return basic_rule(attribute, strings_stmt, condition_stmt, **kwargs)
+
 
 def domaip_ip_rule(attribute, **kwargs):
     domain, ip = attribute['value'].rsplit('|', 1)
-    strings_stmt= ['$ioc_domain = '+text_str(domain, True), '$ioc_ip = '+text_str(ip, True)]
+    strings_stmt = ['$ioc_domain = '+text_str(domain, True), '$ioc_ip = '+text_str(ip, True)]
     condition_stmt = '$ioc_domain and $ioc_ip'
-    return basic_rule(attribute,strings_stmt,condition_stmt, **kwargs)
+    return basic_rule(attribute, strings_stmt, condition_stmt, **kwargs)
+
 
 def ignore_rule(attribute, **kwargs):
     ignore_reason = ('//\t'+kwargs['ignore_reason']) if 'ignore_reason' in kwargs else ''
     return '// Ignored attribute\r\n\
             //\tType: {}\r\n//\tuuid: {}\r\n{}'.format(attribute['type'], attribute['uuid'], ignore_reason)
 
+
 def ignore_rule_unsupported(attribute, **kwargs):
     reason = 'IOC type "{}" is not supported by yara or any of its native modules'.format(attribute['type'])
     return ignore_rule(attribute, ignore_reason=reason, **kwargs)
+
 
 def ignore_rule_irrelevant(attribute, **kwargs):
     reason = 'Creating a yara IOC from a "{}" attribute does not make sense'.format(attribute['type'])
