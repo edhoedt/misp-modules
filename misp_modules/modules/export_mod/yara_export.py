@@ -42,15 +42,28 @@ attributes_with_special_processing={
     'filename|sha512': 'filename_partial_rule',
     'filename|sha512/224': 'filename_partial_rule',
     'filename|sha512/256': 'filename_partial_rule',
+    'filename|ssdeep': 'filename_partial_rule',
+    'filename|impfuzzy': 'filename_partial_rule',
+    'filename|tlsh': 'filename_partial_rule',
+    'filename|authentihash': 'filename_partial_rule',
+    'ip-dst|port':'host_port_rule',
+    'ip-src|port':'host_port_rule',
+    'hostname|port':'host_port_rule',
+    'domain|ip':'domaip_ip_rule',
     # unsupported
     'sha224': 'ignore_rule_unsupported',
     'sha384': 'ignore_rule_unsupported',
     'sha512': 'ignore_rule_unsupported',
     'sha512/224': 'ignore_rule_unsupported',
     'sha512/256': 'ignore_rule_unsupported',
-    # irrelevant
+    'regkey|value': 'ignore_rule_unsupported',
+    'malware-sample': 'ignore_rule_unsupported',
+    # irrelevant or too many false-positives expected
+    'http-method': 'ignore_rule_irrelevant',
     'snort': 'ignore_rule_irrelevant',
-    'port' : 'ignore_rule_irrelevant',
+    'sigma': 'ignore_rule_irrelevant',
+    'attachment': 'ignore_rule_irrelevant',
+
 }
 
 
@@ -157,7 +170,7 @@ def basic_rule(attribute, strings_stmts, condition_stmts, **kwargs):
                         rule_end_section])
 
 def text_str(string_ioc):
-    return u'"{}"'.format(string_ioc.replace('"','\\"'))
+    return u'"{}"'.format(string_ioc.replace('\\','\\\\').replace('"','\\"'))
 
 def hex_str(hex_ioc):
     trimmed_ioc = re.sub(r'\s', '', hex_ioc)
@@ -232,6 +245,18 @@ def filename_partial_rule(attribute, **kwargs):
     filename, _ = attribute['value'].lsplit('|', 1)
     condition_stmt = pe_filename_cond(filename)
     return basic_rule(attribute,None,condition_stmt, modules='pe', **kwargs)
+
+def host_port_rule(attribute, **kwargs):
+    host, port = attribute['value'].rsplit('|', 1)
+    strings_stmt= ['$ioc_host_only = '+text_str(host)]
+    condition_stmt = '$ioc_host_only'
+    return basic_rule(attribute,strings_stmt,condition_stmt, **kwargs)
+
+def domaip_ip_rule(attribute, **kwargs):
+    domain, ip = attribute['value'].rsplit('|', 1)
+    strings_stmt= ['$ioc_domain = '+text_str(domain), '$ioc_ip = '+text_str(ip)]
+    condition_stmt = '$ioc_domain and $ioc_ip'
+    return basic_rule(attribute,strings_stmt,condition_stmt, **kwargs)
 
 def ignore_rule(attribute, **kwargs):
     ignore_reason = ('//\t'+kwargs['ignore_reason']) if 'ignore_reason' in kwargs else ''
