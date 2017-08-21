@@ -67,7 +67,7 @@ def handler(q=False):
         for ev in data:
             event_uuid = ev['Event']['uuid']
             event_info = ev['Event']['info']
-            event_link = server_url+'/event/view/'+event_uuid
+            event_link = server_url+'/events/view/'+event_uuid
             event = ev["Attribute"]
             for attr in event:
                 if attr['to_ids']:
