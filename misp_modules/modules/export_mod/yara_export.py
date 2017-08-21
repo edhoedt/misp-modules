@@ -21,7 +21,6 @@ moduleinfo = {  'version': '0.1',
                 'module-type': ['export']}
 
 # config fields that your code expects from the site admin
-# moduleconfig = ['Group_by_event']
 moduleconfig = ['optional_host_url']
 
 attributes_with_special_processing={
@@ -80,9 +79,7 @@ def handler(q=False):
                         generated_yara+='\r\n\r\n'+processing_func(attr, extra_meta={'event_uuid':event_uuid, 'event_info':event_info, 'event_link':event_link})
                     else:
                         generated_yara+='\r\n\r\n'+single_hex_or_string_rule(attr, extra_meta={'event_uuid':event_uuid, 'event_info':event_info, 'event_link':event_link})
-        response.writestr('q', q)
         response.writestr('_generated_from_IOCs.yar', generated_yara)
-        #r={'data':base64.b64encode(generated_yara.encode('utf-8')).decode('utf-8')}
     zip_buffer.seek(0)
     zip_as_bytes = zip_buffer.read()
     r={'data':base64.b64encode(zip_as_bytes).decode('utf-8')}
@@ -248,14 +245,3 @@ def ignore_rule_unsupported(attribute, **kwargs):
 def ignore_rule_irrelevant(attribute, **kwargs):
     reason = 'Creating a yara IOC from a "{}" attribute does not make sense'.format(attribute['type'])
     return ignore_rule(attribute, ignore_reason=reason, **kwargs)
-
-
-
-#def ip_rule(event_info, event_uuid, attribute)
-#    parse_res = urlparse(attribute['value'])
-#    ip = parse_res.netloc
-#    is_ipv6 =
-#
-#    strings_stmt = '$ip="{}" $ip_port="{}"'.format(ip, attribute['value'])
-#    condition_stmt = '$a'
-#    return basic_rule(event_info,event_uuid,attribute,strings_stmt,condition_stmt)
