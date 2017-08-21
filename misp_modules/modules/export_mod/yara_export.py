@@ -170,8 +170,12 @@ def basic_rule(attribute, strings_stmts, condition_stmts, **kwargs):
                         condition_section,
                         rule_end_section])
 
-def text_str(string_ioc):
-    return u'"{}"'.format(string_ioc.replace('\\','\\\\').replace('"','\\"'))
+def text_str(string_ioc, ascii_wide=False):
+    quoted = u'"{}"'.format(string_ioc.replace('\\','\\\\').replace('"','\\"'))
+    if ascii_wide:
+        return quoted + ' ascii wide'
+    else:
+        return quoted
 
 def hex_str(hex_ioc):
     trimmed_ioc = re.sub(r'\s', '', hex_ioc)
@@ -204,7 +208,7 @@ def yara_rule_rule(attribute, **kwargs):
     return attribute['value']
 
 def single_string_rule(attribute,**kwargs):
-    strings_stmt = '$ioc = '+text_str(attribute['value'])
+    strings_stmt = '$ioc = '+text_str(attribute['value'], True)
     condition_stmt = '$ioc'
     return basic_rule(attribute,strings_stmt,condition_stmt, **kwargs)
 
@@ -214,7 +218,7 @@ def single_hex_rule(attribute, **kwargs):
     return basic_rule(attribute,strings_stmt,condition_stmt, **kwargs)
 
 def single_hex_or_string_rule(attribute, **kwargs):
-    str_value = text_str(attribute['value'])
+    str_value = text_str(attribute['value'], True)
     try:
         hex_value = hex_str(attribute['value'])
         strings_stmt = ['$ioc_str = '+str_value, '$ioc_hex = '+hex_value]
@@ -249,13 +253,13 @@ def filename_partial_rule(attribute, **kwargs):
 
 def host_port_rule(attribute, **kwargs):
     host, port = attribute['value'].rsplit('|', 1)
-    strings_stmt= ['$ioc_host_only = '+text_str(host)]
+    strings_stmt= ['$ioc_host_only = '+text_str(host, True)]
     condition_stmt = '$ioc_host_only'
     return basic_rule(attribute,strings_stmt,condition_stmt, **kwargs)
 
 def domaip_ip_rule(attribute, **kwargs):
     domain, ip = attribute['value'].rsplit('|', 1)
-    strings_stmt= ['$ioc_domain = '+text_str(domain), '$ioc_ip = '+text_str(ip)]
+    strings_stmt= ['$ioc_domain = '+text_str(domain, True), '$ioc_ip = '+text_str(ip, True)]
     condition_stmt = '$ioc_domain and $ioc_ip'
     return basic_rule(attribute,strings_stmt,condition_stmt, **kwargs)
 
