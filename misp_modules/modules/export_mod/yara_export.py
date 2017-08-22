@@ -80,19 +80,19 @@ def handler(q=False):
         for ev in data:
             event_uuid = ev['Event']['uuid']
             event_info = ev['Event']['info']
-            event_link = server_url+'/events/view/'+event_uuid
+            event_link = server_url + '/events/view/' + event_uuid
             event = ev["Attribute"]
             event_meta = {'event_uuid': event_uuid, 'event_info': event_info, 'event_link': event_link}
             for attr in event:
                 if attr['to_ids']:
                     attr_type = attr['type']
                     if attr_type == 'yara':
-                        response.writestr(attr['uuid']+'.yar', attr['value'])
+                        response.writestr(attr['uuid'] + '.yar', attr['value'])
                     elif attr_type in attributes_with_special_processing:
                         processing_func = globals()[attributes_with_special_processing[attr_type]]
-                        generated_yara += '\r\n\r\n'+processing_func(attr, extra_meta=event_meta)
+                        generated_yara += '\r\n\r\n' + processing_func(attr, extra_meta=event_meta)
                     else:
-                        generated_yara += '\r\n\r\n'+single_hex_or_string_rule(attr, extra_meta=event_meta)
+                        generated_yara += '\r\n\r\n' + single_hex_or_string_rule(attr, extra_meta=event_meta)
         response.writestr('_generated_from_IOCs.yar', generated_yara)
     zip_buffer.seek(0)
     zip_as_bytes = zip_buffer.read()
@@ -152,15 +152,15 @@ def basic_rule(attribute, strings_stmts, condition_stmts, **kwargs):
     if 'extra_meta' in kwargs and kwargs['extra_meta']:
         meta_dict.update(kwargs['extra_meta'])
     rulename = 'Attr_{}'.format(re.sub(r'\W+', '_', attribute['uuid']))
-    meta = '\r\n\t\t'.join([(key+' = '+text_str(meta_dict[key])) for key in meta_dict])
+    meta = '\r\n\t\t'.join([(key + ' = ' + text_str(meta_dict[key])) for key in meta_dict])
     strings = '\r\n\t\t'.join(strings_stmts) if strings_stmts else ''
     condition = '\r\n\t\t'.join(condition_stmts) if condition_stmts else ''
 
     imports_section = '\r\n'.join(['import "{}"'.format(m) for m in modules]) if modules else ''
-    rule_start_section = 'rule '+rulename+'{'
+    rule_start_section = 'rule ' + rulename + '{'
     meta_section = '\tmeta:\r\n\t\t' + meta
-    strings_section = ('\tstrings:\r\n\t\t'+strings) if strings else ''
-    condition_section = ('\tcondition:\r\n\t\t'+condition) if condition else ''
+    strings_section = ('\tstrings:\r\n\t\t' + strings) if strings else ''
+    condition_section = ('\tcondition:\r\n\t\t' + condition) if condition else ''
     rule_end_section = '}'
 
     return '\r\n'.join([imports_section,
@@ -183,7 +183,7 @@ def hex_str(hex_ioc):
     trimmed_ioc = re.sub(r'\s', '', hex_ioc)
     trimmed_ioc = trimmed_ioc.strip('}"{\'')
     if all(c.lower() in '0123456789abcdef' for c in trimmed_ioc):
-        return '{'+trimmed_ioc+'}'
+        return '{' + trimmed_ioc + '}'
     else:
         raise ValueError('hex_str expects a string in hex format \
                          possibly surrounded by curly brackets, spaces or quotes')
@@ -204,7 +204,7 @@ def hash_cond(hashtype, hashvalue):
 
 
 def pe_filename_cond(filename):
-    return 'pe.version_info["OriginalFilename"] == '+text_str(filename)
+    return 'pe.version_info["OriginalFilename"] == ' + text_str(filename)
 
 
 # ----- FUNCTIONS TO CONVERT ATTRIBUTES TO YARA RULES ACCORDING TO THEIR TYPE --
@@ -214,13 +214,13 @@ def yara_rule_rule(attribute, **kwargs):
 
 
 def single_string_rule(attribute, **kwargs):
-    strings_stmt = '$ioc = '+text_str(attribute['value'], True)
+    strings_stmt = '$ioc = ' + text_str(attribute['value'], True)
     condition_stmt = '$ioc'
     return basic_rule(attribute, strings_stmt, condition_stmt, **kwargs)
 
 
 def single_hex_rule(attribute, **kwargs):
-    strings_stmt = '$ioc = '+hex_str(attribute['value'])
+    strings_stmt = '$ioc = ' + hex_str(attribute['value'])
     condition_stmt = '$ioc'
     return basic_rule(attribute, strings_stmt, condition_stmt, **kwargs)
 
@@ -229,7 +229,7 @@ def single_hex_or_string_rule(attribute, **kwargs):
     str_value = text_str(attribute['value'], True)
     try:
         hex_value = hex_str(attribute['value'])
-        strings_stmt = ['$ioc_str = '+str_value, '$ioc_hex = '+hex_value]
+        strings_stmt = ['$ioc_str = ' + str_value, '$ioc_hex = ' + hex_value]
         condition_stmt = '$ioc_str or $ioc_hex'
     except ValueError as e:
         strings_stmt = '$ioc = ' + str_value
@@ -242,7 +242,7 @@ def hash_rule(attribute, **kwargs):
         _, hashtype = attribute['type'].rsplit('|', 1)
         filename, hashvalue = attribute['value'].rsplit('|', 1)
         condition_stmt, required_module = hash_cond(hashtype, hashvalue)
-        condition_stmt = condition_stmt + ' or '+pe_filename_cond(filename)
+        condition_stmt = condition_stmt + ' or ' + pe_filename_cond(filename)
         if required_module is not 'pe':
             required_module = [required_module, 'pe']
     else:
@@ -265,20 +265,20 @@ def filename_partial_rule(attribute, **kwargs):
 
 def host_port_rule(attribute, **kwargs):
     host, port = attribute['value'].rsplit('|', 1)
-    strings_stmt = ['$ioc_host_only = '+text_str(host, True)]
+    strings_stmt = ['$ioc_host_only = ' + text_str(host, True)]
     condition_stmt = '$ioc_host_only'
     return basic_rule(attribute, strings_stmt, condition_stmt, **kwargs)
 
 
 def domaip_ip_rule(attribute, **kwargs):
     domain, ip = attribute['value'].rsplit('|', 1)
-    strings_stmt = ['$ioc_domain = '+text_str(domain, True), '$ioc_ip = '+text_str(ip, True)]
+    strings_stmt = ['$ioc_domain = ' + text_str(domain, True), '$ioc_ip = ' + text_str(ip, True)]
     condition_stmt = '$ioc_domain and $ioc_ip'
     return basic_rule(attribute, strings_stmt, condition_stmt, **kwargs)
 
 
 def ignore_rule(attribute, **kwargs):
-    ignore_reason = ('//\t'+kwargs['ignore_reason']) if 'ignore_reason' in kwargs else ''
+    ignore_reason = ('//\t' + kwargs['ignore_reason']) if 'ignore_reason' in kwargs else ''
     return '// Ignored attribute\r\n\
             //\tType: {}\r\n//\tuuid: {}\r\n{}'.format(attribute['type'], attribute['uuid'], ignore_reason)
 
